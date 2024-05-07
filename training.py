@@ -1,5 +1,5 @@
 import argparse
-from models import MLP, GCN, Test_GCN, Test_GCN2, ChebNet
+from models import MLP, GCN, Test_GCN, Test_GCN2, ChebNet, GPRGNN
 from dataset_loader import DataLoader
 from utils import *
 import torch.nn.functional as F
@@ -33,16 +33,21 @@ def test(model, data):
 
 
 def RunExp(args, dataset, data, Net, percls_trn, val_lb):
-    device = torch.device('cpu')
-
+    device = torch.device('cuda:'+str(args.device) if torch.cuda.is_available() else 'cpu')
     tmp_net = Net(dataset, args)
-    # Using the dataset splits described in the paper.
 
+    # Using the dataset splits described in the paper.
     data = random_splits(data, dataset.num_classes, percls_trn, val_lb, args.seed)
 
     model, data = tmp_net.to(device), data.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    if args.net == 'GPRGNN':
+        optimizer = torch.optim.Adam(
+            [{'params': model.lin1.parameters(), 'weight_decay': args.weight_decay, 'lr': args.lr},
+             {'params': model.lin2.parameters(), 'weight_decay': args.weight_decay, 'lr': args.lr},
+             {'params': model.prop1.parameters(), 'weight_decay': 0.00, 'lr': args.lr}])
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     best_val_acc = test_acc = 0
     best_val_loss = float('inf')
@@ -92,14 +97,16 @@ if __name__ == '__main__':
     parser.add_argument('--K', type=int, default=10, help='propagation steps.')
     parser.add_argument('--alpha', type=float, default=0.1, help='alpha for APPN.')
     parser.add_argument('--dprate', type=float, default=0.5, help='dropout for propagation layer.')
+    parser.add_argument('--Init', type=str, choices=['SGC', 'PPR', 'NPPR', 'Random', 'WS', 'Null'],
+                        default='SGC', help='initialization for GPRGNN.')
 
     parser.add_argument('--dataset', type=str,
                         choices=['Cora', 'Citeseer', 'Pubmed', 'Chameleon', 'Squirrel', 'Actor', 'Texas', 'Cornell'],
                         default='Cornell')
-    # parser.add_argument('--device', type=int, default=0, help='GPU device.')
+    parser.add_argument('--device', type=int, default=0, help='GPU device.')
     parser.add_argument('--runs', type=int, default=10, help='number of runs.')
-    parser.add_argument('--net', type=str, choices=['GCN', 'Test_GCN', 'Test_GCN2', 'ChebNet'],
-                        default='Test_GCN2')
+    parser.add_argument('--net', type=str, choices=['GCN', 'Test_GCN', 'Test_GCN2', 'ChebNet', 'GPRGNN'],
+                        default='GPRGNN')
     # parser.add_argument('--prop_lr', type=float, default=0.01, help='learning rate for propagation layer.')
     # parser.add_argument('--prop_wd', type=float, default=0.0005, help='learning rate for propagation layer.')
 
@@ -124,6 +131,8 @@ if __name__ == '__main__':
         Net = Test_GCN2
     elif gnn_name == 'ChebNet':
         Net = ChebNet
+    elif gnn_name == 'GPRGNN':
+        Net = GPRGNN
 
     dataset = DataLoader(args.dataset)
     data = dataset[0]
