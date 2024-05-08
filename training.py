@@ -1,5 +1,5 @@
 import argparse
-from models import MLP, GCN, Test_GCN, Test_GCN2, ChebNet, GPRGNN
+from models import MLP, GCN, FracGCN, ChebNet, GPRGNN
 from dataset_loader import DataLoader
 from utils import *
 import torch.nn.functional as F
@@ -105,7 +105,7 @@ if __name__ == '__main__':
                         default='Cornell')
     parser.add_argument('--device', type=int, default=0, help='GPU device.')
     parser.add_argument('--runs', type=int, default=10, help='number of runs.')
-    parser.add_argument('--net', type=str, choices=['GCN', 'Test_GCN', 'Test_GCN2', 'ChebNet', 'GPRGNN'],
+    parser.add_argument('--net', type=str, choices=['MLP', 'GCN', 'FracGCN', 'ChebNet', 'GPRGNN'],
                         default='GPRGNN')
     # parser.add_argument('--prop_lr', type=float, default=0.01, help='learning rate for propagation layer.')
     # parser.add_argument('--prop_wd', type=float, default=0.0005, help='learning rate for propagation layer.')
@@ -125,10 +125,8 @@ if __name__ == '__main__':
         Net = GCN
     elif gnn_name == 'MLP':
         Net = MLP
-    elif gnn_name == 'Test_GCN':
-        Net = Test_GCN
-    elif gnn_name == 'Test_GCN2':
-        Net = Test_GCN2
+    elif gnn_name == 'FracGCN':
+        Net = FracGCN
     elif gnn_name == 'ChebNet':
         Net = ChebNet
     elif gnn_name == 'GPRGNN':
@@ -169,5 +167,3 @@ if __name__ == '__main__':
         np.abs(sns.utils.ci(sns.algorithms.bootstrap(values, func=np.mean, n_boot=1000), 95) - values.mean()))
     print(f'{gnn_name} on dataset {args.dataset}, in {args.runs} repeated experiment:')
     print(f'test acc mean = {test_acc_mean:.4f} ± {uncertainty * 100:.4f}  \t val acc mean = {val_acc_mean:.4f}')
-
-    print(results)
