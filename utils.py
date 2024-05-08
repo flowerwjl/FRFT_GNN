@@ -1,5 +1,5 @@
 import torch
-from torch_geometric.utils import degree, to_dense_adj, get_laplacian, to_scipy_sparse_matrix, add_self_loops
+from torch_geometric.utils import degree, to_dense_adj, get_laplacian, to_scipy_sparse_matrix, add_self_loops, add_remaining_self_loops
 import numpy as np
 from scipy.linalg import fractional_matrix_power
 import sympy
@@ -7,53 +7,73 @@ from sympy import Matrix
 import scipy
 
 
-def get_L(edge_index: torch.Tensor, num_nodes: int):
+def get_L(edge_index: torch.Tensor, num_nodes=None, is_remove_self_loops=False):
 
-    # 计算邻接矩阵
-    A = to_dense_adj(edge_index)[0]
+    if num_nodes is None:
+        num_nodes = int(edge_index.max()) + 1
 
-    # 计算节点度数
-    row, col = edge_index
-    deg = degree(row)
+    if is_remove_self_loops:
+        """
+        以下返回「去除掉自环的图」的拉普拉斯矩阵
+        """
 
-    # 计算度矩阵
-    # D = torch.diag(deg)
-    # D_half = torch.diag(deg ** 0.5)
+        l_edge, l_w = get_laplacian(edge_index, normalization='sym')  # 返回的是「去除掉自环的图」的拉普拉斯矩阵
+        laplacian = to_scipy_sparse_matrix(l_edge, l_w)  # 将edge_index转换为COO格式的稀疏矩阵
+        laplacian = torch.tensor(laplacian.toarray())
 
-    # 计算正则化度矩阵
-    D_half_neg = torch.diag(deg ** -0.5)
+        # eigenvalue, _ = scipy.sparse.linalg.eigsh(laplacian, k=1, which="LM")   # 求解稀疏矩阵的特征值
 
-    # 计算正则化邻接矩阵
-    P = D_half_neg @ A @ D_half_neg
+    else:
+        """
+        以下返回原图的拉普拉斯矩阵
+        """
 
-    # 计算正则化图拉普拉斯矩阵
+        # 计算邻接矩阵
+        A = to_dense_adj(edge_index)[0]
+
+        # 计算节点度数
+        row, col = edge_index
+        deg = degree(row)
+
+        # 计算度矩阵
+        # D = torch.diag(deg)
+        # D_half = torch.diag(deg ** 0.5)
+
+        # 计算正则化度矩阵
+        D_half_neg = torch.diag(deg ** -0.5)
+
+        # 计算正则化邻接矩阵
+        P = D_half_neg @ A @ D_half_neg
+
+        # 计算正则化图拉普拉斯矩阵
+        I = torch.eye(num_nodes)
+        laplacian = I - P
+
+    return laplacian
+
+
+def get_P_tilde(edge_index: torch.Tensor, num_nodes=None):
+
+    if num_nodes is None:
+        num_nodes = int(edge_index.max()) + 1
+
     I = torch.eye(num_nodes)
-    L = I - P
+    L_tilde = get_L_tilde(edge_index, num_nodes=num_nodes)
 
-    # l_edge, l_w = get_laplacian(edge_index, normalization='sym')    # 返回的是「去除掉自环的图」的拉普拉斯矩阵
-    # laplacian = to_scipy_sparse_matrix(l_edge, l_w)  # 将edge_index转换为COO格式的稀疏矩阵
-    # print(laplacian.toarray())
-    # eigenvalue, _ = scipy.sparse.linalg.eigsh(laplacian, k=1, which="LM")   # 求解稀疏矩阵的特征值
-
-    return L
-
-
-def get_P_tilde(edge_index: torch.Tensor, num_nodes: int):
-    I = torch.eye(num_nodes)
-    edge_index, _ = add_self_loops(edge_index, num_nodes=num_nodes)
-
-    # 计算邻接矩阵
-    A_tilde = to_dense_adj(edge_index)[0]
-
-    # 计算节点度数
-    row, col = edge_index
-    deg = degree(row)
-
-    # 计算正则化度矩阵
-    D_half_neg_tilde = torch.diag(deg ** -0.5)
-    P_tilde = D_half_neg_tilde @ A_tilde @ D_half_neg_tilde
+    P_tilde = I - L_tilde
 
     return P_tilde
+
+
+def get_L_tilde(edge_index: torch.Tensor, num_nodes=None):
+
+    if num_nodes is None:
+        num_nodes = int(edge_index.max()) + 1
+
+    edge_index, _ = add_remaining_self_loops(edge_index=edge_index, num_nodes=num_nodes)
+    L_tilde = get_L(edge_index, num_nodes=num_nodes, is_remove_self_loops=False)
+    return L_tilde
+
 
 def eigen_decomposition(matrix):
 
@@ -129,6 +149,13 @@ if __name__ == '__main__':
     edge_index = torch.tensor([[0, 0, 0, 1, 1, 2, 2, 2, 2, 3, 4, 4, 5, 5], [1, 2, 3, 0, 2, 1, 0, 4, 5, 0, 2, 5, 2, 4]])
     L = get_L(edge_index, 6)
     print(L)
+    edge_index = torch.tensor([[0, 0, 1, 2], [1, 2, 0, 0]])
+    L = get_L(edge_index, is_remove_self_loops=True)
+    print(L)
+    P_tilde = get_P_tilde(edge_index)
+    print(P_tilde)
+    L_tilde = get_L_tilde(edge_index)
+    print(L_tilde)
     #
     # eigenvalues, eigenvectors = eigen_decomposition(L)
     # print(eigenvalues)
