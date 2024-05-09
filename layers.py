@@ -29,7 +29,7 @@ class GPR_prop(MessagePassing):
             TEMP[-1] = (1 - alpha) ** K
         elif Init == 'NPPR':
             # Negative PPR
-            TEMP = (alpha) ** np.arange(K + 1)
+            TEMP = alpha ** np.arange(K + 1)
             TEMP = TEMP / np.sum(np.abs(TEMP))
         elif Init == 'Random':
             # Random

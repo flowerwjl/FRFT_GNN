@@ -98,7 +98,7 @@ if __name__ == '__main__':
     parser.add_argument('--alpha', type=float, default=0.1, help='alpha for APPN.')
     parser.add_argument('--dprate', type=float, default=0.5, help='dropout for propagation layer.')
     parser.add_argument('--Init', type=str, choices=['SGC', 'PPR', 'NPPR', 'Random', 'WS', 'Null'],
-                        default='SGC', help='initialization for GPRGNN.')
+                        default='Random', help='initialization for GPRGNN.')
 
     parser.add_argument('--dataset', type=str,
                         choices=['Cora', 'Citeseer', 'Pubmed', 'Chameleon', 'Squirrel', 'Actor', 'Texas', 'Cornell'],
