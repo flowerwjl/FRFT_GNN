@@ -36,8 +36,12 @@ def RunExp(args, dataset, data, Net, percls_trn, val_lb):
     device = torch.device('cuda:'+str(args.device) if torch.cuda.is_available() else 'cpu')
     tmp_net = Net(dataset, args)
 
-    # Using the dataset splits described in the paper.
-    data = random_splits(data, dataset.num_classes, percls_trn, val_lb, args.seed)
+    # # Using the dataset splits described in the paper.(ChebNetII)
+    # data = random_splits(data, dataset.num_classes, percls_trn, val_lb, args.seed)
+
+    # randomly split dataset.(BernNet)
+    permute_masks = random_planetoid_splits
+    data = permute_masks(data, dataset.num_classes, percls_trn, val_lb, args.seed)
 
     model, data = tmp_net.to(device), data.to(device)
 
