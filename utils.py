@@ -75,6 +75,17 @@ def get_L_tilde(edge_index: torch.Tensor, num_nodes=None):
     return L_tilde
 
 
+def get_fractional_L_tilde(edge_index: torch.Tensor, num_nodes=None, power=0.5):
+
+    if num_nodes is None:
+        num_nodes = int(edge_index.max()) + 1
+
+    L_tilde = get_L_tilde(edge_index=edge_index, num_nodes=num_nodes)
+    L_tilde_alpha = fractional_matrix_power(L_tilde, power)
+
+    return torch.tensor(L_tilde_alpha)
+
+
 def eigen_decomposition(matrix):
 
     # 断言保证matrix是实对称矩阵
@@ -156,6 +167,8 @@ if __name__ == '__main__':
     print(P_tilde)
     L_tilde = get_L_tilde(edge_index)
     print(L_tilde)
+
+    L_tilde_alpha = get_fractional_L_tilde(edge_index, power=0.5)
     #
     # eigenvalues, eigenvectors = eigen_decomposition(L)
     # print(eigenvalues)

@@ -3,8 +3,7 @@ from torch.nn import Linear
 from torch_geometric.nn import GCNConv, ChebConv
 from layers import FracGCNConv, GPR_prop
 import torch.nn.functional as F
-from utils import get_L_tilde, get_P_tilde
-from scipy.linalg import fractional_matrix_power
+from utils import get_L_tilde, get_P_tilde, get_fractional_L_tilde
 
 
 class GPRGNN(torch.nn.Module):
@@ -102,6 +101,8 @@ class FracGCN(torch.nn.Module):
             .to(torch.device('cuda:'+str(args.device) if torch.cuda.is_available() else 'cpu'))
         self.P_tilde = get_P_tilde(edge_index=dataset[0].edge_index)\
             .to(torch.device('cuda:'+str(args.device) if torch.cuda.is_available() else 'cpu'))
+        self.L_tilde_alpha = get_fractional_L_tilde(edge_index=dataset[0].edge_index, power=args.frac_power)\
+            .to(torch.device('cuda:'+str(args.device) if torch.cuda.is_available() else 'cpu'))
 
     def reset_parameters(self):
         self.conv1.reset_parameters()
@@ -109,10 +110,10 @@ class FracGCN(torch.nn.Module):
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
-        x = self.conv1(x=x, P_tilde=self.P_tilde)
+        x = self.conv1(x=x, L_tilde_alpha=self.L_tilde_alpha)
         x = F.relu(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.conv2(x=x, P_tilde=self.P_tilde)
+        x = self.conv2(x=x, L_tilde_alpha=self.L_tilde_alpha)
         return F.log_softmax(x, dim=1)
 
 

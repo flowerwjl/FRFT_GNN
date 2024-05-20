@@ -115,6 +115,8 @@ if __name__ == '__main__':
     # parser.add_argument('--semi_rnd', type=bool, default=False, help='semi-supervised with random splits')
     # parser.add_argument('--semi_fix', type=bool, default=False, help='semi-supervised with fixed splits')
 
+    parser.add_argument('--frac_power, type=float', default=0.5, help='fractional power order for Fractional GNNs')
+
     args = parser.parse_args()
 
     print(args)

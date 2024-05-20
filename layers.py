@@ -112,12 +112,12 @@ class FracGCNConv(MessagePassing):
         super().__init__()
         self.lin = torch.nn.Linear(in_channels, out_channels)
 
-    def forward(self, x, P_tilde):
+    def forward(self, x, L_tilde_alpha):
         x = self.lin(x)
 
         I = torch.eye(x.size(0))
 
-        out = torch.matmul(P_tilde, x)
+        out = torch.matmul(I-L_tilde_alpha, x)
 
         return out
 
