@@ -111,13 +111,24 @@ class FracGCNConv(MessagePassing):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.lin = torch.nn.Linear(in_channels, out_channels)
+        self.lin2 = torch.nn.Linear(2*out_channels, out_channels)
 
-    def forward(self, x, L_tilde_alpha):
+    def forward(self, x, P_tilde_alpha):
         x = self.lin(x)
 
-        I = torch.eye(x.size(0))
+        P_tilde_alpha_real = torch.real(P_tilde_alpha).to(torch.float32)
+        P_tilde_alpha_imag = torch.imag(P_tilde_alpha).to(torch.float32)
 
-        out = torch.matmul(I-L_tilde_alpha, x)
+        # 前向卷积表征相加
+        out = torch.matmul(P_tilde_alpha_real, x) + torch.matmul(P_tilde_alpha_imag, x)
+
+        # 前向卷积表征拼接
+        # out = torch.cat([torch.matmul(P_tilde_alpha_real, x), torch.matmul(P_tilde_alpha_imag, x)], dim=1)
+        # out = self.lin2(out)
+
+        # 整数阶GCN
+        # P_tilde = L_tilde_alpha
+        # out = torch.matmul(I - P_tilde, x)
 
         return out
 

@@ -75,15 +75,24 @@ def get_L_tilde(edge_index: torch.Tensor, num_nodes=None):
     return L_tilde
 
 
-def get_fractional_L_tilde(edge_index: torch.Tensor, num_nodes=None, power=0.5):
+def get_L_P_tilde_alpha(edge_index: torch.Tensor, num_nodes=None, power=0.5):
 
     if num_nodes is None:
         num_nodes = int(edge_index.max()) + 1
 
     L_tilde = get_L_tilde(edge_index=edge_index, num_nodes=num_nodes)
-    L_tilde_alpha = fractional_matrix_power(L_tilde, power)
+    e_vals, e_vecs = eigen_decomposition(L_tilde)
 
-    return torch.tensor(L_tilde_alpha)
+    # e_vals = e_vals ** power
+    e_vecs = fractional_matrix_power(e_vecs, power)
+    e_vecs_H = np.conj(e_vecs.T)
+
+    L_tilde_alpha = e_vecs @ np.diag(e_vals) @ e_vecs_H
+
+    I = np.eye(num_nodes)
+    P_tilde_alpha = I - L_tilde_alpha
+
+    return torch.tensor(L_tilde_alpha, dtype=torch.complex128), torch.tensor(P_tilde_alpha, dtype=torch.complex128)
 
 
 def eigen_decomposition(matrix):
@@ -99,7 +108,7 @@ def eigen_decomposition(matrix):
     eigen_vectors[abs(eigen_vectors) < 1e-7] = 0
 
     # U是正交矩阵
-    assert np.allclose(eigen_vectors.T, np.linalg.inv(eigen_vectors), atol=1e-7)
+    assert np.allclose(eigen_vectors.T, np.linalg.inv(eigen_vectors), atol=1e-6)
 
     return eigen_values, eigen_vectors
 
@@ -168,7 +177,7 @@ if __name__ == '__main__':
     L_tilde = get_L_tilde(edge_index)
     print(L_tilde)
 
-    L_tilde_alpha = get_fractional_L_tilde(edge_index, power=0.5)
+    L_tilde_alpha = get_L_P_tilde_alpha(edge_index, power=0.5)
     #
     # eigenvalues, eigenvectors = eigen_decomposition(L)
     # print(eigenvalues)

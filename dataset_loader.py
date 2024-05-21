@@ -1,9 +1,7 @@
 import torch
-import math
 import pickle
 import os
 import os.path as osp
-import numpy as np
 import torch_geometric.transforms as T
 from torch_geometric.datasets import Planetoid, WikipediaNetwork, Actor
 from torch_sparse import coalesce
@@ -137,7 +135,7 @@ def DataLoader(name):
 
 
 if __name__ == '__main__':
-    dataset = DataLoader('texas')
+    dataset = DataLoader('Cora')
     data = dataset[0]
     print(data)
     print(dataset.num_classes)
