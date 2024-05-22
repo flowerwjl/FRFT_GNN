@@ -103,7 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str,
                         choices=['Cora', 'Citeseer', 'Pubmed', 'Chameleon', 'Squirrel', 'Actor', 'Texas', 'Cornell'],
                         default='Texas')
-    parser.add_argument('--device', type=int, default=0, help='GPU device.')
+    parser.add_argument('--device', type=int, default=1, help='GPU device.')
     parser.add_argument('--runs', type=int, default=10, help='number of runs.')
     parser.add_argument('--net', type=str, choices=['MLP', 'GCN', 'FracGCN', 'ChebNet', 'GPRGNN'],
                         default='FracGCN')
@@ -115,7 +115,8 @@ if __name__ == '__main__':
     # parser.add_argument('--semi_rnd', type=bool, default=False, help='semi-supervised with random splits')
     # parser.add_argument('--semi_fix', type=bool, default=False, help='semi-supervised with fixed splits')
 
-    parser.add_argument('--frac_power', type=float, default=0.5, help='fractional power order for Fractional GNNs')
+    parser.add_argument('--frac_power', type=float, choices=[0.2, 0.4, 0.5, 0.6, 0.8, 1.0],
+                        default=0.5, help='fractional power order for Fractional GNNs')
 
     args = parser.parse_args()
 

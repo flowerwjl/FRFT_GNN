@@ -1,10 +1,9 @@
 import torch
 from torch_geometric.utils import degree, to_dense_adj, get_laplacian, to_scipy_sparse_matrix, add_self_loops, add_remaining_self_loops
 import numpy as np
-from scipy.linalg import fractional_matrix_power
-import sympy
-from sympy import Matrix
 import scipy
+from dataset_loader import DataLoader
+import os
 
 
 def get_L(edge_index: torch.Tensor, num_nodes=None, is_remove_self_loops=False):
@@ -19,7 +18,8 @@ def get_L(edge_index: torch.Tensor, num_nodes=None, is_remove_self_loops=False):
 
         l_edge, l_w = get_laplacian(edge_index, normalization='sym')  # 返回的是「去除掉自环的图」的拉普拉斯矩阵
         laplacian = to_scipy_sparse_matrix(l_edge, l_w)  # 将edge_index转换为COO格式的稀疏矩阵
-        laplacian = torch.tensor(laplacian.toarray())
+        laplacian = laplacian.toarray()         # 将稀疏矩阵转换为numpy数组
+        laplacian = torch.tensor(laplacian)     # 将numpy数组转换为torch张量
 
         # eigenvalue, _ = scipy.sparse.linalg.eigsh(laplacian, k=1, which="LM")   # 求解稀疏矩阵的特征值
 
@@ -75,7 +75,7 @@ def get_L_tilde(edge_index: torch.Tensor, num_nodes=None):
     return L_tilde
 
 
-def get_L_P_tilde_alpha(edge_index: torch.Tensor, num_nodes=None, power=0.5):
+def get_L_P_tilde_alpha(edge_index: torch.Tensor, num_nodes=None, power=0.5, return_np=False):
 
     if num_nodes is None:
         num_nodes = int(edge_index.max()) + 1
@@ -84,13 +84,16 @@ def get_L_P_tilde_alpha(edge_index: torch.Tensor, num_nodes=None, power=0.5):
     e_vals, e_vecs = eigen_decomposition(L_tilde)
 
     # e_vals = e_vals ** power
-    e_vecs = fractional_matrix_power(e_vecs, power)
+    e_vecs = scipy.linalg.fractional_matrix_power(e_vecs, power)
     e_vecs_H = np.conj(e_vecs.T)
 
     L_tilde_alpha = e_vecs @ np.diag(e_vals) @ e_vecs_H
 
     I = np.eye(num_nodes)
     P_tilde_alpha = I - L_tilde_alpha
+
+    if return_np:
+        return L_tilde_alpha, P_tilde_alpha
 
     return torch.tensor(L_tilde_alpha, dtype=torch.complex128), torch.tensor(P_tilde_alpha, dtype=torch.complex128)
 
@@ -108,9 +111,34 @@ def eigen_decomposition(matrix):
     eigen_vectors[abs(eigen_vectors) < 1e-7] = 0
 
     # U是正交矩阵
-    assert np.allclose(eigen_vectors.T, np.linalg.inv(eigen_vectors), atol=1e-6)
+    assert np.allclose(eigen_vectors.T, np.linalg.inv(eigen_vectors), atol=1e-5)
 
     return eigen_values, eigen_vectors
+
+
+def save_fractional_matrix():
+
+    for dataset_name in ['Actor']:
+
+        dataset = DataLoader(dataset_name)
+        data = dataset[0]
+
+        # create directory if not exist
+        os.makedirs(f'fractional_matrix/{dataset_name}', exist_ok=True)
+
+        for i in [0.2, 0.4, 0.5, 0.6, 0.8, 1.0]:
+            L_tilde_alpha, P_tilde_alpha = get_L_P_tilde_alpha(edge_index=data.edge_index, power=i, return_np=True)
+            np.save(f'fractional_matrix/{dataset_name}/L_tilde_alpha_{i}.npy', L_tilde_alpha)
+            np.save(f'fractional_matrix/{dataset_name}/P_tilde_alpha_{i}.npy', P_tilde_alpha)
+            print(f'{dataset_name} fractional order {i} matrix saved.')
+
+
+def load_fractional_matrix(dataset_name: str, power: float):
+
+    L_tilde_alpha = np.load(f'fractional_matrix/{dataset_name}/L_tilde_alpha_{power}.npy')
+    P_tilde_alpha = np.load(f'fractional_matrix/{dataset_name}/P_tilde_alpha_{power}.npy')
+
+    return torch.tensor(L_tilde_alpha, dtype=torch.complex128), torch.tensor(P_tilde_alpha, dtype=torch.complex128)
 
 
 def print_dataset_info(dataset):
@@ -165,39 +193,6 @@ def random_splits(data, num_classes, percls_trn, val_lb, seed=42):
 
 
 if __name__ == '__main__':
-    # test data
-    edge_index = torch.tensor([[0, 0, 0, 1, 1, 2, 2, 2, 2, 3, 4, 4, 5, 5], [1, 2, 3, 0, 2, 1, 0, 4, 5, 0, 2, 5, 2, 4]])
-    L = get_L(edge_index, 6)
-    print(L)
-    edge_index = torch.tensor([[0, 0, 1, 2], [1, 2, 0, 0]])
-    L = get_L(edge_index, is_remove_self_loops=True)
-    print(L)
-    P_tilde = get_P_tilde(edge_index)
-    print(P_tilde)
-    L_tilde = get_L_tilde(edge_index)
-    print(L_tilde)
+    save_fractional_matrix()
 
-    L_tilde_alpha = get_L_P_tilde_alpha(edge_index, power=0.5)
-    #
-    # eigenvalues, eigenvectors = eigen_decomposition(L)
-    # print(eigenvalues)
-    # print(eigenvectors)
-    #
-    # print('----------------------------------------------------------')
-    # U = eigenvectors
-    # print(np.linalg.eigvals(U))
-    # U_12 = fractional_matrix_power(U, 0.5)
-    # print(U_12)
-    # print('----------------------------------------------------------')
-    # # M = Matrix(np.array([[2, 0, -1, 0], [-1, 1, 0, -1], [0, 0, 2, 0], [1, 1, 1, 3]]))
-    # # # M = Matrix(U)
-    # # P, Ja = M.jordan_form()
-    # # print(Ja)
-    # print('----------------------------------------------------------')
-    # # M = I - U
-    # M = np.eye(U.shape[0]) - U
-    # logU = 0
-    # for k in range(1, 6):
-    #     logU += M / k
-    #     M = M @ M
-    # print(logU)
+    # np.load('fractional_matrix/Texas/L_tilde_alpha_0.2.npy')

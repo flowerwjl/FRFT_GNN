@@ -3,7 +3,7 @@ from torch.nn import Linear
 from torch_geometric.nn import GCNConv, ChebConv
 from layers import FracGCNConv, GPR_prop
 import torch.nn.functional as F
-from utils import get_L_tilde, get_P_tilde, get_L_P_tilde_alpha
+from utils import get_L_tilde, get_P_tilde, get_L_P_tilde_alpha, load_fractional_matrix
 
 
 class GPRGNN(torch.nn.Module):
@@ -97,12 +97,16 @@ class FracGCN(torch.nn.Module):
         self.conv2 = FracGCNConv(args.hidden, dataset.num_classes)
         self.dropout = args.dropout
 
-        self.P_tilde = get_P_tilde(edge_index=dataset[0].edge_index)\
-            .to(torch.device('cuda:'+str(args.device) if torch.cuda.is_available() else 'cpu'))
-        self.L_tilde_alpha = get_L_P_tilde_alpha(edge_index=dataset[0].edge_index, power=args.frac_power)[0]\
-            .to(torch.device('cuda:'+str(args.device) if torch.cuda.is_available() else 'cpu'))
-        self.P_tilde_alpha = get_L_P_tilde_alpha(edge_index=dataset[0].edge_index, power=args.frac_power)[1] \
-            .to(torch.device('cuda:' + str(args.device) if torch.cuda.is_available() else 'cpu'))
+        # self.P_tilde = get_P_tilde(edge_index=dataset[0].edge_index).to(
+        #     torch.device('cuda:' + str(args.device) if torch.cuda.is_available() else 'cpu'))
+
+        self.L_tilde_alpha, self.P_tilde_alpha = load_fractional_matrix(
+            dataset_name=args.dataset, power=args.frac_power)
+
+        self.L_tilde_alpha = self.L_tilde_alpha.to(
+            torch.device('cuda:' + str(args.device) if torch.cuda.is_available() else 'cpu'))
+        self.P_tilde_alpha = self.P_tilde_alpha.to(
+            torch.device('cuda:' + str(args.device) if torch.cuda.is_available() else 'cpu'))
 
     def reset_parameters(self):
         self.conv1.reset_parameters()
