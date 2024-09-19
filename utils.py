@@ -118,18 +118,18 @@ def eigen_decomposition(matrix):
 
 def save_fractional_matrix():
 
-    for dataset_name in ['Actor']:
+    for dataset_name in ['Texas', 'Cornell']:
 
         dataset = DataLoader(dataset_name)
         data = dataset[0]
 
         # create directory if not exist
-        os.makedirs(f'fractional_matrix/{dataset_name}', exist_ok=True)
+        os.makedirs(f'fractional_matrix2/{dataset_name}', exist_ok=True)
 
         for i in [0.2, 0.4, 0.5, 0.6, 0.8, 1.0]:
             L_tilde_alpha, P_tilde_alpha = get_L_P_tilde_alpha(edge_index=data.edge_index, power=i, return_np=True)
-            np.save(f'fractional_matrix/{dataset_name}/L_tilde_alpha_{i}.npy', L_tilde_alpha)
-            np.save(f'fractional_matrix/{dataset_name}/P_tilde_alpha_{i}.npy', P_tilde_alpha)
+            np.save(f'fractional_matrix2/{dataset_name}/L_tilde_alpha_{i}.npy', L_tilde_alpha)
+            np.save(f'fractional_matrix2/{dataset_name}/P_tilde_alpha_{i}.npy', P_tilde_alpha)
             print(f'{dataset_name} fractional order {i} matrix saved.')
 
 
@@ -194,5 +194,3 @@ def random_splits(data, num_classes, percls_trn, val_lb, seed=42):
 
 if __name__ == '__main__':
     save_fractional_matrix()
-
-    # np.load('fractional_matrix/Texas/L_tilde_alpha_0.2.npy')
