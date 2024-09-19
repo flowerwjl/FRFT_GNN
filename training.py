@@ -1,5 +1,5 @@
 import argparse
-from models import MLP, GCN, FracGCN, ChebNet, GPRGNN
+from models import MLP, GCN, FracGCN, ChebNet, GPRGNN, BernNet
 from dataset_loader import DataLoader
 from utils import *
 import torch.nn.functional as F
@@ -7,6 +7,9 @@ from tqdm import tqdm
 import time
 import seaborn as sns
 import seaborn.algorithms
+import pandas as pd
+from torch_geometric.utils import dropout_edge, add_random_edge, mask_feature
+import torch
 
 
 def train(model, optimizer, data, dprate):
@@ -34,7 +37,7 @@ def test(model, data):
 
 def RunExp(args, dataset, data, Net, percls_trn, val_lb):
     device = torch.device('cuda:'+str(args.device) if torch.cuda.is_available() else 'cpu')
-    tmp_net = Net(dataset, args)
+    tmp_net = Net(dataset, args, data=data)
 
     # Using the dataset splits described in the paper.
     data = random_splits(data, dataset.num_classes, percls_trn, val_lb, args.seed)
@@ -91,21 +94,21 @@ if __name__ == '__main__':
     parser.add_argument('--early_stopping', type=int, default=200, help='early stopping.')
     parser.add_argument('--hidden', type=int, default=64, help='hidden units.')
     parser.add_argument('--dropout', type=float, default=0.5, help='dropout for neural networks.')
-
     parser.add_argument('--train_rate', type=float, default=0.6, help='train set rate.')
     parser.add_argument('--val_rate', type=float, default=0.2, help='val set rate.')
+    parser.add_argument('--dprate', type=float, default=0.5, help='dropout for propagation layer.')
+    parser.add_argument('--runs', type=int, default=10, help='number of runs.')
+    parser.add_argument('--device', type=int, default=2, help='GPU device.')
+
     parser.add_argument('--K', type=int, default=10, help='propagation steps.')
     parser.add_argument('--alpha', type=float, default=0.1, help='alpha for APPN.')
-    parser.add_argument('--dprate', type=float, default=0.5, help='dropout for propagation layer.')
     parser.add_argument('--Init', type=str, choices=['SGC', 'PPR', 'NPPR', 'Random', 'WS', 'Null'],
-                        default='Random', help='initialization for GPRGNN.')
+                        default='NPPR', help='initialization for GPRGNN.')
 
     parser.add_argument('--dataset', type=str,
                         choices=['Cora', 'Citeseer', 'Pubmed', 'Chameleon', 'Squirrel', 'Actor', 'Texas', 'Cornell'],
-                        default='Texas')
-    parser.add_argument('--device', type=int, default=1, help='GPU device.')
-    parser.add_argument('--runs', type=int, default=10, help='number of runs.')
-    parser.add_argument('--net', type=str, choices=['MLP', 'GCN', 'FracGCN', 'ChebNet', 'GPRGNN'],
+                        default='Cornell')
+    parser.add_argument('--net', type=str, choices=['GCN', 'FracGCN', 'GPRGNN', 'SGC', 'APPNP', 'BernNet'],
                         default='FracGCN')
     # parser.add_argument('--prop_lr', type=float, default=0.01, help='learning rate for propagation layer.')
     # parser.add_argument('--prop_wd', type=float, default=0.0005, help='learning rate for propagation layer.')
@@ -115,13 +118,25 @@ if __name__ == '__main__':
     # parser.add_argument('--semi_rnd', type=bool, default=False, help='semi-supervised with random splits')
     # parser.add_argument('--semi_fix', type=bool, default=False, help='semi-supervised with fixed splits')
 
-    parser.add_argument('--frac_power', type=float, choices=[0.2, 0.4, 0.5, 0.6, 0.8, 1.0],
-                        default=0.5, help='fractional power order for Fractional GNNs')
+    parser.add_argument('--frac_power', type=float, choices=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+                        default=1.0, help='fractional power order for Fractional GNNs')
+    parser.add_argument('--dropout_edge', type=float, default=0.0,
+                        help='dropout rate of dropping edge')
+    parser.add_argument('--add_edge', type=float, default=0.0,
+                        help='add rate of edge')
+    parser.add_argument('--mask_p', type=float, default=0.0)
+    parser.add_argument('--noise', type=bool, default=False)
+    parser.add_argument('--drop_node', type=float, default=0.0)
+    parser.add_argument('--change_labels', type=float, default=0.0)
 
     args = parser.parse_args()
 
     print(args)
     print("---------------------------------------------")
+
+    dataset = DataLoader(args.dataset)
+    data = dataset[0]
+
 
     gnn_name = args.net
     if gnn_name == 'GCN':
@@ -134,9 +149,15 @@ if __name__ == '__main__':
         Net = ChebNet
     elif gnn_name == 'GPRGNN':
         Net = GPRGNN
-
-    dataset = DataLoader(args.dataset)
-    data = dataset[0]
+        args.Init = 'NPPR'
+    elif gnn_name == 'SGC':
+        args.Init = 'SGC'
+        Net = GPRGNN
+    elif gnn_name == 'APPNP':
+        args.Init = 'PPR'
+        Net = GPRGNN
+    elif gnn_name == 'BernNet':
+        Net = BernNet
 
     if args.full:
         args.train_rate = 0.6
@@ -151,6 +172,23 @@ if __name__ == '__main__':
     results = []
     time_results = []
     for RP in tqdm(range(args.runs)):
+        data = dataset[0]
+        data.edge_index, _ = add_random_edge(edge_index=data.edge_index, force_undirected=True, p=args.add_edge)
+        data.edge_index, _ = dropout_edge(data.edge_index, force_undirected=True, p=args.dropout_edge)
+        data.x, _ = mask_feature(data.x, mode='all', p=args.mask_p)
+        if args.noise:
+            noise = torch.randn_like(data.x) * 0.005
+            data.x = data.x + noise
+        if args.change_labels != 0:
+            # 计算要替换的元素数量
+            num_elements_to_replace = int(len(data.y) * args.change_labels)
+            # 随机选择要替换的索引
+            indices_to_replace = torch.randperm(len(data.y))[:num_elements_to_replace]
+            # 生成0到k范围内的随机整数
+            random_integers = torch.randint(0, dataset.num_classes, (num_elements_to_replace,))
+            # 替换指定索引处的元素
+            data.y[indices_to_replace] = random_integers
+
         test_acc, best_val_acc, theta_0, time_run = RunExp(args, dataset, data, Net, percls_trn, val_lb)
         time_results.append(time_run)
         results.append([test_acc, best_val_acc, theta_0])
@@ -163,6 +201,9 @@ if __name__ == '__main__':
         epochsss += len(i)
     print("each run avg_time:", run_sum / args.runs, "s")
     print("each epoch avg_time:", 1000 * run_sum / epochsss, "ms")
+
+    results.remove(max(results))
+    results.remove(min(results))
     test_acc_mean, val_acc_mean, _ = np.mean(results, axis=0) * 100
     test_acc_std = np.sqrt(np.var(results, axis=0)[0]) * 100
     values = np.asarray(results, dtype=object)[:, 0]
@@ -170,3 +211,35 @@ if __name__ == '__main__':
         np.abs(sns.utils.ci(sns.algorithms.bootstrap(values, func=np.mean, n_boot=1000), 95) - values.mean()))
     print(f'{gnn_name} on dataset {args.dataset}, in {args.runs} repeated experiment:')
     print(f'test acc mean = {test_acc_mean:.4f} ± {uncertainty * 100:.4f}  \t val acc mean = {val_acc_mean:.4f}')
+
+
+    with open('run_log/run_log.txt', 'a') as f:
+        f.write(f'\n{gnn_name} on dataset {args.dataset}, frac_order={args.frac_power}, drop:{args.dropout_edge}, add:{args.add_edge}')
+        f.write(f'\neach run avg_time: {run_sum / args.runs}s')
+        f.write(f'\neach epoch avg_time: {1000 * run_sum / epochsss}ms')
+        f.write(f'\ntest acc mean = {test_acc_mean:.2f}±{uncertainty * 100:.2f}  \t val acc mean = {val_acc_mean:.2f}')
+        f.write(f'\n')
+    #
+    #
+    # # 读取CSV文件
+    # df = pd.read_csv(f'run_log/{gnn_name}_acc.csv')
+    #
+    # # 定位到列名为'AAA'的列
+    # column_name = args.dataset
+    # column_index = df.columns.get_loc(column_name)
+    #
+    # # 在第3行写入数据90
+    # df.at[int(args.frac_power * 10), column_name] = f'{test_acc_mean:.2f}±{uncertainty * 100:.2f}'
+    #
+    # # 保存修改后的CSV文件
+    # df.to_csv(f'run_log/{gnn_name}_acc.csv', index=False)
+    #
+    #
+    # # 读取CSV文件
+    # df = pd.read_csv(f'run_log/{gnn_name}_time.csv')
+    #
+    # # 在第3行写入数据90
+    # df.at[int(args.frac_power * 10), column_name] = f'{run_sum / args.runs: .2f}'
+    #
+    # # 保存修改后的CSV文件
+    # df.to_csv(f'run_log/{gnn_name}_time.csv', index=False)
